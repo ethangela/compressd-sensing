@@ -1,6 +1,6 @@
 """Compressed sensing main script"""
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" ###########################################
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
 import numpy as np
 import tensorflow as tf
 print('Tensorflow version', tf.__version__)
@@ -341,8 +341,8 @@ if __name__ == '__main__':
     PARSER = ArgumentParser()
 
     # Input
-    PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
-    PARSER.add_argument('--img_name', type=str, default='tf.png', help='image to use')
+    PARSER.add_argument('--path', type=str, default='./image', help='path stroing the images')
+    PARSER.add_argument('--img_name', type=str, default='182659.jpg', help='image to use')
     PARSER.add_argument('--noise_std', type=float, default=0.1, help='std dev of noise')
     
     # Measurement type specific hparams
