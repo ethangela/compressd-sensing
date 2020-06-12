@@ -202,9 +202,9 @@ def fit(net,
             sess.run(tf.global_variables_initializer())    
             
             if find_best:
-                if not os.path.exists('./log'):
-                    os.makedirs('./log/')
-                save_log_dir = os.path.join('log', datetime.now().strftime("%m-%d_%H-%M"))
+                if not os.path.exists('./Model/Gaussian'):
+                    os.makedirs('./Model/Gaussian/')
+                save_log_dir = os.path.join('Model/Gaussian', datetime.now().strftime("%m-%d_%H-%M"))
                 if verbose:
                     print('Save net in', save_log_dir)
                 saver = tf.train.Saver(max_to_keep=1)
