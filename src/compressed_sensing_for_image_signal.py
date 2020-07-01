@@ -105,10 +105,10 @@ def get_num_params():
         total_parameters += params
     return total_parameters
 
-def save_img(img, path, name, image_mode): 
+def save_img(img, path, img_name, name, image_mode): 
     img = img[0]
     if image_mode == '1D':
-        name = name + '.npy'
+        name = img_name[:-4] + '_' + name + '.npy'
         img = img[:,:,0]
         img = img[:,0]
         print('saving shape {}'.format(img.shape))
@@ -116,13 +116,13 @@ def save_img(img, path, name, image_mode):
         np.save(os.path.join(path, name), img)
     elif image_mode == '2D':
         img = img[:, :, 0]    
-        name = name + '.npy'
+        name = img_name[:-4] + '_' + name + '.npy'
         print('saving shape {}'.format(img.shape))
         #img.tofile(os.path.join(path, name))
         np.save(os.path.join(path, name), img)
     else:
         img = img * 255.
-        name = name + '.jpg'
+        name = img_name[:-4] + '_' + name + '.jpg'
         imsave(os.path.join(path, name), img.astype(np.uint8))
         
         
@@ -131,13 +131,11 @@ def fit(net,
         num_channels,
         img_shape,
         image_mode,
+        img_name, 
         type_measurements,
         num_measurements,
         y_feed,
         A_feed,
-        reg_noise_std=0,
-        reg_noise_decayevery=100000,
-        reg_noise_decay_rate=0.7,
         lr_decay_epoch=0,
         lr_decay_rate=0.65,
         LR=0.01,
@@ -155,7 +153,6 @@ def fit(net,
         img_shape: original real image shape, a 4D tensor, e.g. [1,64,64,3] 
         type_measurements, num_measurements: the type and number of measurements 
         y_feed, A_feed: real oberservation y and measurment matrix A
-        reg_noise_std, reg_noise_decayevery, reg_noise_decay_rate: parameters of the random noise to input z 
         LR, lr_decay_epoch, lr_decay_rate: parameters of learning rate 
         device: device name 
         
@@ -183,21 +180,13 @@ def fit(net,
             else:    
                 height = int(img_shape[2] / totalupsample)
             z = tf.constant(np.random.uniform(size=[1, width, height, num_channels[0]]).astype(np.float32) * 1. / 10, name='z') 
-            z_saved = z
-            
-            # Optional random noise to inputs
-            if reg_noise_std > 0:
-                reg_noise = tf.train.exponential_decay(reg_noise_std, global_step, reg_noise_decayevery, reg_noise_decay_rate, staircase=True)
-                z += tf.random_uniform(tf.shape(z)) * reg_noise
             
             # Deep decoder prior 
             feed_forward = tf.make_template("DeepDecoder", net) #feed_forward takes a 4D Tensor (batch, width, height, channels) as input and outputs a 4D Tensor (batch, width*2^6, height*2^6, channels=3)
-            x = feed_forward(z) #net_output with shape [1, img_wid, img_high, 3] 
-            x_saved = feed_forward(z_saved) #original output image with shape [1, img_wid, img_high, 3]
+            x = feed_forward(z) #net_output with shape [1, img_wid, img_high, 3]               
             
             # Compressed sensing         
             y_hat = tf.matmul(tf.reshape(x, [1,-1]), A, name='y_hat')
-            y_hat_from_saved = tf.matmul(tf.reshape(x_saved, [1,-1]), A, name='y_hat_from_saved')
         
             # Define loss  
             mse = tf.losses.mean_squared_error
@@ -221,14 +210,10 @@ def fit(net,
             with tf.control_dependencies(update_ops):
                 train_op = optimizer.minimize(loss, global_step=global_step)    
 
-            # Additional output information
-            if reg_noise_std > 0: 
-                true_loss_original = mse(y, y_hat_from_saved)
 
         with tf.Session() as sess:
             # Init            
             mse = [0.] * num_iter
-            mse_original = [0.] * num_iter
             sess.run(tf.global_variables_initializer())    
             
             if find_best:
@@ -236,14 +221,11 @@ def fit(net,
                     os.makedirs('log/')
                 if not os.path.exists('result'):
                     os.makedirs('result/')
-                #save_log_dir = os.path.join('log', datetime.now().strftime("%m-%d_%H-%M"))
-                #if verbose:
-                    #print('Save net in', save_log_dir)
                 saver = tf.train.Saver(max_to_keep=1)
-                saver.save(sess, os.path.join('log/', 'model.ckpt'), global_step=0)
+                #saver.save(sess, os.path.join('log/', 'model.ckpt'), global_step=0)
                 best_mse = 1000000.0
-                best_img = sess.run(x_saved)
-                save_img(best_img, 'result/', '0', image_mode)
+                best_img = sess.run(x)
+                save_img(best_img, 'result/', img_name, '0', image_mode) 
             
             # Feed dict
             feed_dict = {A: A_feed, y: y_feed}
@@ -254,26 +236,21 @@ def fit(net,
             print('\x1b[37mFinal graph size: %.2f MB\x1b[0m' % (tf.get_default_graph().as_graph_def().ByteSize() / 10e6))
 
             for i in range(num_iter):
-                if reg_noise_std <= 0:  
-                    loss_, _ = sess.run([loss, train_op], feed_dict=feed_dict)
-                    true_loss_original_ = loss_
-                else:
-                    loss_, true_loss_original_, _ = sess.run([loss, true_loss_original, train_op], feed_dict=feed_dict)
+                loss_, _ = sess.run([loss, train_op], feed_dict=feed_dict)
                 mse[i] = loss_
-                mse_original[i] = true_loss_original_
-                        
+       
                 # Display
                 if i > 0 and i % 10 == 0:
-                    print ('\r[Iteration %05d] loss=%.5f  true loss orig=%.5f' % (i, loss_, true_loss_original_), end='')  
+                    print ('\r[Iteration %05d] loss=%.5f' % (i, loss_), end='')  
                 
                 # Best net
                 if find_best and best_mse > 1.005 * loss_:
                     best_mse = loss_
-                    best_img = sess.run(x_saved)
-                    saver.save(sess, os.path.join('log/', 'model.ckpt'), global_step=i + 1)
+                    best_img = sess.run(x)
+                    #saver.save(sess, os.path.join('log/', 'model.ckpt'), global_step=i + 1)
                 
                 if (i+1)%1000 == 0:
-                    save_img(best_img, 'result/', '{}'.format(i + 1), image_mode)
+                    save_img(best_img, 'result/', img_name, '{}'.format(i + 1), image_mode) 
                         
             # Return final image or best found so far if `find_best`
             if find_best:
@@ -281,22 +258,30 @@ def fit(net,
                 print()
                 print('Best MSE (wrt noisy)', best_mse)
             else:
-                out_img = sess.run(x_saved)
+                out_img = sess.run(x)
             if verbose:
-                return mse, mse_original, out_img, num_params
+                return mse, out_img, num_params
             else:
-                return mse, mse_original, out_img
+                return mse, out_img
     
     
 # == main part == #
 def load_1D(path, img_name):
     img_path = os.path.join(path, img_name)
-    img = np.fromfile(img_path)
+    img = np.load(img_path)
     img = img[:, None]
     img = img[:, :, None]
     img = img[None, :, :, :]
     return img
 
+def load_2D(path, img_name):
+    img_path = os.path.join(path, img_name)
+    img = np.load(img_path)
+    if len(img.shape) == 2:
+        img = img[:, :, None]
+    img = img[None, :, :, :]
+    return img
+    
 def load_img(path, img_name):
     img_path = os.path.join(path, img_name)
     img = imread(img_path)
@@ -315,6 +300,8 @@ def main(hparams):
     # Get inputs
     if hparams.image_mode == '1D':
         x_real = np.array(load_1D(hparams.path, hparams.img_name)).astype(np.float32)
+    elif hparams.image_mode == '2D':
+        x_real = np.array(load_2D(hparams.path, hparams.img_name)).astype(np.float32)
     else:
         x_real = np.array(load_img(hparams.path, hparams.img_name)).astype(np.float32)
     
@@ -328,10 +315,10 @@ def main(hparams):
         noise_shape = [1, mea_shape]
     
     # Construct oberservation
-    observ_noise = hparams.noise_std * np.random.randn(noise_shape[0], noise_shape[1])
+    observ_noise = hparams.noise_level * np.random.randn(noise_shape[0], noise_shape[1])
     print(A.shape)
     print(x_real.reshape(1,-1).shape)
-    y_real = np.matmul(x_real.reshape(1,-1), A) + observ_noise #[10,100]
+    y_real = np.matmul(x_real.reshape(1,-1), A) + observ_noise #noise level with shape [10,100]
     
     # Define num_channles 
     num_channels = [hparams.k]*hparams.num_channel   
@@ -344,16 +331,15 @@ def main(hparams):
                      upsample_first=False)
     
     # Fit in     
-    mse, mse_original, out_img, nparms = fit(net=net_fn,
+    mse, out_img, nparms = fit(net=net_fn,
                            num_channels=num_channels,
                            img_shape=x_real.shape,
-                           image_mode=hparams.image_mode, 
+                           image_mode=hparams.image_mode,
+                           img_name=hparams.img_name,                           
                            type_measurements=hparams.type_measurements,
                            num_measurements=hparams.num_measurements,
                            y_feed=y_real,
                            A_feed=A,
-                           reg_noise_std=hparams.rn,
-                           reg_noise_decayevery=hparams.rnd,
                            LR=0.005,
                            num_iter=hparams.numit,
                            find_best=True,
@@ -361,7 +347,7 @@ def main(hparams):
     #out_img = out_img[0] #4D tensor to 3D tensor if need to plot 
     
     # Compute and print measurement and l2 loss
-    measurement_losses = mse_original[-1]
+    measurement_losses = mse[-1]
     l2_losses = get_l2_loss(out_img, x_real)
     print ('Final measurement loss is {}'.format(measurement_losses))
     print ('Final representation loss is {}'.format(l2_losses))
@@ -372,21 +358,21 @@ if __name__ == '__main__':
     PARSER = ArgumentParser()
  
     # Input
-    PARSER.add_argument('--image_mode', type=str, default='2D', help='path stroing the images')
+    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
     PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
-    PARSER.add_argument('--noise_std', type=float, default=0.1, help='std dev of noise')
-    PARSER.add_argument('--img_name', type=str, default='2D3.jpg', help='image to use') ###################################
+    PARSER.add_argument('--noise_level', type=float, default=0.01, help='std dev of noise') ###################################
+    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
     
     # Measurement type specific hparams
-    PARSER.add_argument('--type_measurements', type=str, default='random', help='measurement type')
+    PARSER.add_argument('--type_measurements', type=str, default='identity', help='measurement type')
     PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements')
 
     # Deep decoder 
     PARSER.add_argument('--k', type=int, default=64, help='number of channel dimension')
-    PARSER.add_argument('--num_channel', type=int, default=4, help='number of upsample channles')
+    PARSER.add_argument('--num_channel', type=int, default=5, help='number of upsample channles')
     
     # "Training"
-    PARSER.add_argument('--rn', type=float, default=0.005, help='reg_noise_std')
+    PARSER.add_argument('--rn', type=float, default=0, help='reg_noise_std')
     PARSER.add_argument('--rnd', type=int, default=500, help='reg_noise_decayevery')
     PARSER.add_argument('--numit', type=int, default=10000, help='number of iterations')
    
