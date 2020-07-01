@@ -221,7 +221,7 @@ def fit(net,
                     os.makedirs('log/')
                 if not os.path.exists('result'):
                     os.makedirs('result/')
-                saver = tf.train.Saver(max_to_keep=1)
+                #saver = tf.train.Saver(max_to_keep=1)
                 #saver.save(sess, os.path.join('log/', 'model.ckpt'), global_step=0)
                 best_mse = 1000000.0
                 best_img = sess.run(x)
