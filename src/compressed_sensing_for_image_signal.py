@@ -493,7 +493,7 @@ if __name__ == '__main__':
  
     # Input
     PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
-    PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
+    PARSER.add_argument('--path', type=str, default='image/Gaussian signal/', help='path stroing the images')
     PARSER.add_argument('--noise_level', type=float, default=0.01, help='std dev of noise') ###################################
     PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
     
