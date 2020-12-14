@@ -50,7 +50,7 @@ def sample_from_1D_Gaussian(size, kernel, l_val, idx):
     ##plt.plot(xs, fs, 'gray') # Plot the samples
     ##plt.savefig('1D_'+kernel+'_'+str(l_val)+'.jpg')
     #np.save('1D_'+kernel+'_'+str(l_val)+'.npy', fs)
-    np.save('image/Gaussian signal/1D_'+kernel+'_'+str(l_val)+'_'+str(size)+'_'+str(idx)+'.npy', fs)
+    np.save('../image/Gaussian signal/1D_'+kernel+'_'+str(l_val)+'_'+str(size)+'_'+str(idx)+'.npy', fs)
    
    
 def main(size, hparams, idx):
