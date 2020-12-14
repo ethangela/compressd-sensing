@@ -749,14 +749,14 @@ if __name__ == '__main__':
  
     # Input
     PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') 
-    PARSER.add_argument('--path', type=str, default='image/Gaussian signal', help='path stroing the images')
+    PARSER.add_argument('--path', type=str, default='../image/Gaussian signal', help='path stroing the images')
     PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') 
     PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') 
     PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') 
     PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') 
     PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements') 
-    PARSER.add_argument('--mask_name_1D', type=str, default='mask/1D_rbf_3.0_1.npy', help='mask to use') 
-    PARSER.add_argument('--mask_name_2D', type=str, default='mask/2D_rbf_3.0_1.npy', help='mask to use') 
+    PARSER.add_argument('--mask_name_1D', type=str, default='../mask/1D_rbf_3.0_1.npy', help='mask to use') 
+    PARSER.add_argument('--mask_name_2D', type=str, default='../mask/2D_rbf_3.0_1.npy', help='mask to use') 
     PARSER.add_argument('--pickle_file_path', type=str, default='result/cs_result.pkl') 
     PARSER.add_argument('--hyperband_mode', type=int, default=0) 
 
