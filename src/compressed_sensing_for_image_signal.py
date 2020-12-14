@@ -12,6 +12,11 @@ from skimage.color import rgb2gray, rgba2rgb, gray2rgb
 from argparse import ArgumentParser
 import math
 import pandas as pd 
+#from scipy.linalg import dft
+from scipy.fftpack import fft, ifft
+#from scipy.sparse import diags
+#from scipy import linalg
+import random
 
 
 # == decoder part == #
@@ -57,14 +62,13 @@ def _bn(x, bn_affine):
 
 def decodernw(inputs,
               num_output_channels=3, 
-              num_channels_up=[128] * 6,
+              channels_times_layers=[128] * 6,
               filter_size_up=1,
               need_sigmoid=True, 
               pad='reflection',
               upsample_mode='bilinear',
               image_mode=None,
-              act_fun=tf.nn.relu, # tf.nn.leaky_relu 
-              bn_before_act=False,
+              act_fun='relu', # tf.nn.relu, tf.nn.leaky_relu, tf.nn.sigmoid
               bn_affine=True,
               factor=None,
               input_size=128
@@ -72,35 +76,37 @@ def decodernw(inputs,
     """Deep Decoder.
        Takes as inputs a 4D Tensor (batch, width, height, channels)""" #which is the fixed noise with channels = 1
     ## Configure
-    n_scales = len(num_channels_up) #equals to 6
+    n_scales = len(channels_times_layers) #equals to 6
+    if act_fun == 'relu':
+        activation = tf.nn.relu
+    elif act_fun == 'leaky_relu':
+        activation = tf.nn.leaky_relu
+    elif act_fun == 'sigmoid':
+        activation = tf.nn.sigmoid
     
     if not (isinstance(filter_size_up, list) or isinstance(filter_size_up, tuple)) :
         filter_size_up = [filter_size_up] * n_scales #[1, 1 ,...] with shape of [1,6]                                               
         
     ## Deep Decoder
-    net = inputs
-    for i, (num_channels, kernel_size) in enumerate(zip(num_channels_up, filter_size_up)):       
+    # B_0
+    net = inputs 
+    
+    # B_1 to B_d
+    for i, (num_channels, kernel_size) in enumerate(zip(channels_times_layers, filter_size_up)): 
         # Conv        
-        net = _pad(net, kernel_size, pad)
         net = tf.layers.conv2d(net, num_channels, kernel_size=kernel_size, strides=1, activation=None, padding='valid', use_bias=False)
         
-        # Batch Norm + activation
-        if bn_before_act: 
-            net = _bn(net, bn_affine)           
-        net = act_fun(net)
-        if not bn_before_act: 
-            net = _bn(net, bn_affine)
-        
-        # Upsample (second)
-        if i != len(num_channels_up) - 1:
-            net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(num_channels_up)-1, input_size)
+        # Upsample 
+        net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(channels_times_layers), input_size)
+
+        # Activation + Batch Norm           
+        net = activation(net)
+        net = _bn(net, bn_affine)
  
                 
-    # Final convolution
+    # output x
     kernel_size = 1
-    net = _pad(net, kernel_size, pad)
-    net = tf.layers.conv2d(net, num_output_channels, kernel_size, strides=1, 
-                           activation=None, padding='valid', use_bias=False)
+    net = tf.layers.conv2d(net, num_output_channels, kernel_size, strides=1, activation=None, padding='valid', use_bias=False)
     if need_sigmoid:
         net = tf.nn.sigmoid(net)    
     return net #Outputs a 4D Tensor (batch, width*2^6, height*2^6, channels=3) 
@@ -144,18 +150,22 @@ def fix_kernel(size, dim, c=2):
     sum = a.sum()
     a = a/sum
     return np.array(a) 
+
+def kernel_build_assistant(filter_size):
+    mtx_1D = fix_kernel(filter_size, 1)
+    mtx_2D = fix_kernel(filter_size, 2)
+    return mtx_1D, mtx_2D
     
 def fixed_decodernw(inputs,
                     num_output_channels=3, 
-                    num_channels_up=[128] * 5,
+                    channels_times_layers=[128] * 6,
                     filter_size_up=1,
                     filter_size=3,
                     need_sigmoid=True, 
                     pad='reflection',
                     upsample_mode='bilinear',
                     image_mode=None,
-                    act_fun=tf.nn.relu, # tf.nn.leaky_relu 
-                    bn_before_act=False,
+                    act_fun='relu',  # tf.nn.leaky_relu 
                     bn_affine=True,
                     factor=None,
                     input_size=128
@@ -163,67 +173,47 @@ def fixed_decodernw(inputs,
     """Deep Decoder.
        Takes as inputs a 4D Tensor (batch, width, height, channels)""" #which is the fixed noise with channels = 1
     ## Configure
-    n_scales = len(num_channels_up) #equals to 6
+    n_scales = len(channels_times_layers) #equals to 6
+    if act_fun == 'relu':
+        activation = tf.nn.relu
+    elif act_fun == 'leaky_relu':
+        activation = tf.nn.leaky_relu
+    elif act_fun == 'sigmoid':
+        activation = tf.nn.sigmoid
     
     if not (isinstance(filter_size_up, list) or isinstance(filter_size_up, tuple)) :
         filter_size_up = [filter_size_up] * n_scales #[1, 1 ,...] with shape of [1,6]                                               
         
     ## Deep Decoder
+    # B_0
     net = inputs
     
     # Fixed kernel
-    if filter_size == 4:
-        mtx_1D = fix_kernel(4, 1)
-        mtx_2D = fix_kernel(4, 2)
-    elif filter_size == 5:
-        mtx_1D = fix_kernel(5, 1)
-        mtx_2D = fix_kernel(5, 2)
-    elif filter_size == 16:
-        mtx_1D = fix_kernel(16, 1)
-        mtx_2D = fix_kernel(16, 2)
-    elif filter_size == 3:
-        mtx_1D = fix_kernel(3, 1)
-        mtx_2D = fix_kernel(3, 2)
-    elif filter_size == 8:
-        mtx_1D = fix_kernel(8, 1)
-        mtx_2D = fix_kernel(8, 2)
+    mtx_1D, mtx_2D = kernel_build_assistant(filter_size)    
     
     if image_mode == '1D':
-        filter_np = kernel_build(mtx_1D, num_channels_up[0])
+        filter_np = kernel_build(mtx_1D, channels_times_layers[0])
     elif image_mode == '2D' or '3D':
-        filter_np = kernel_build(mtx_2D, num_channels_up[0])
+        filter_np = kernel_build(mtx_2D, channels_times_layers[0])
     filter_cons = tf.constant(filter_np.astype(np.float32))
     filter = tf.Variable(filter_cons, name='fixed_kernel', trainable=False)
     
-    # Convolutions 
-    for i, (num_channels, kernel_size) in enumerate(zip(num_channels_up, filter_size_up)):       
+    # B_1 to B_d 
+    for i, (num_channels, kernel_size) in enumerate(zip(channels_times_layers, filter_size_up)):       
 
         # Conv
-        #if image_mode == '1D':
-        #    net = tf.pad(net, ((0, 0), (1, 0), (0, 0), (0, 0)), "REFLECT")
-        #    net = tf.pad(net, ((0, 0), (2, 0), (0, 0), (0, 0)), "CONSTANT")
-        #elif image_mode == '2D' or '3D':
-        #    net = tf.pad(net, ((0, 0), (1, 0), (1, 0), (0, 0)), "REFLECT")
-        #    net = tf.pad(net, ((0, 0), (2, 0), (2, 0), (0, 0)), "CONSTANT")
-        #net = tf.nn.conv2d(net, filter, strides=(1,1,1,1), padding='VALID')
         net = tf.nn.conv2d(net, filter, strides=(1,1,1,1), padding='SAME')
         net = tf.layers.conv2d(net, num_channels, kernel_size=kernel_size, strides=1, activation=None, padding='valid', use_bias=False)
 
-        # Batch Norm + activation
-        if bn_before_act: 
-            net = _bn(net, bn_affine)           
-        net = act_fun(net)
-        if not bn_before_act: 
-            net = _bn(net, bn_affine) 
-            
-        # Upsample (second)
-        if i != len(num_channels_up) - 1:
-            #print('9/11 input size for model 1 check: {}'.format(input_size))
-            net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(num_channels_up)-1, input_size)
-                
-    # Final convolution
+        # Upsample
+        net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(channels_times_layers), input_size)
+
+        # Batch Norm + activation          
+        net = activation(net)
+        net = _bn(net, bn_affine) 
+                  
+    # X output
     kernel_size = 1
-    net = _pad(net, kernel_size, pad)
     net = tf.layers.conv2d(net, num_output_channels, kernel_size, strides=1, 
                            activation=None, padding='valid', use_bias=False)
     if need_sigmoid:
@@ -237,47 +227,49 @@ def fixed_decodernw(inputs,
 def deconv_decoder(
         inputs,
         num_output_channels=3, 
-        num_channels_up=[128]*6, 
+        channels_times_layers=[128]*6, 
         filter_size=4,
         image_mode=None,
         pad ='reflection', 
-        act_fun=tf.nn.relu, 
+        act_fun='relu', 
         bn_affine=True,
         stride=1,
         need_sigmoid=True, 
         upsample_mode='bilinear',
-        bn_before_act=False,
         factor=None,
         input_size=128
         ):
     
     ## Configure
-    n_scales = len(num_channels_up)
+    n_scales = len(channels_times_layers)
+    if act_fun == 'relu':
+        activation = tf.nn.relu
+    elif act_fun == 'leaky_relu':
+        activation = tf.nn.leaky_relu
+    elif act_fun == 'sigmoid':
+        activation = tf.nn.sigmoid
     
     ## Deep decoder 
+    # B_0
     net = inputs
     
-    for i in range(len(num_channels_up)):
+    # B_1 to B_d
+    for i in range(len(channels_times_layers)):
         # TransConv
         if image_mode == '1D':
-            net = tf.layers.conv2d_transpose(net, num_channels_up[i], kernel_size=(filter_size,1), strides=(stride,1), activation=None, padding='same', use_bias=False)
+            net = tf.layers.conv2d_transpose(net, channels_times_layers[i], kernel_size=(filter_size,1), strides=(stride,1), activation=None, padding='same', use_bias=False)
         elif image_mode == '2D' or '3D':
-            net = tf.layers.conv2d_transpose(net, num_channels_up[i], kernel_size=filter_size, strides=stride, activation=None, padding='same', use_bias=False)
+            net = tf.layers.conv2d_transpose(net, channels_times_layers[i], kernel_size=filter_size, strides=stride, activation=None, padding='same', use_bias=False)
         
-        # Batch Norm + activation
-        if bn_before_act: 
-            net = _bn(net, bn_affine)           
-        net = act_fun(net)
-        if not bn_before_act: 
-            net = _bn(net, bn_affine)            
-            
         # Upsample
-        if i != len(num_channels_up) - 1:
-            net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(num_channels_up)-1, input_size)
+        net = _upsample(i+1, net, upsample_mode, image_mode, factor, len(channels_times_layers), input_size)
+
+        # Batch Norm + activation         
+        net = activation(net)
+        net = _bn(net, bn_affine)            
         
-    # Final convolution
+    # X output
     kernel_size = 1
-    net = _pad(net, kernel_size, pad)
     net = tf.layers.conv2d(net, num_output_channels, kernel_size, strides=1, 
                            activation=None, padding='valid', use_bias=False)
     if need_sigmoid:
@@ -301,10 +293,10 @@ def get_num_params():######################################
         #print('\t')
     return total_parameters
 
-def save_img(img, path, img_name, name, image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_channel, mask_info=''):
+def save_img(img, path, img_name, name, image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_layers, input_size, mask_info='', act_function='relu'):
     img = img[0]
     if image_mode == '1D':
-        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(filter_size) +  '_' + str(upsample_mode) + '_' + mask_info + '_' + str(num_channels_real) + '_' + str(num_channel) + '.npy'
+        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(upsample_mode) +  '_mask_info_' + mask_info + '_filter_size_' + str(filter_size) + '_channels_' + str(num_channels_real) + '_layers_' + str(num_layers) + '_input_size_' + str(input_size) + '_act_' + act_function +'.npy'
         img = img[:,:,0]
         img = img[:,0]
         print('saving shape {}'.format(img.shape))
@@ -312,18 +304,18 @@ def save_img(img, path, img_name, name, image_mode, decoder_type, filter_size, u
         np.save(os.path.join(path, name), img)
     elif image_mode == '2D':
         img = img[:, :, 0]    
-        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(filter_size) +  '_' + str(upsample_mode) + '_' + mask_info + '_' + str(num_channels_real) + '_' + str(num_channel) + '.npy'
+        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(upsample_mode) +  '_mask_info_' + mask_info + '_filter_size_' + str(filter_size) + '_channels_' + str(num_channels_real) + '_layers_' + str(num_layers) + '_input_size_' + str(input_size) + '_act_' + act_function +'.npy'
         print('saving shape {}'.format(img.shape))
         #img.tofile(os.path.join(path, name))
         np.save(os.path.join(path, name), img)
     else:
         img = img * 255.
-        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(filter_size) +  '_' + str(upsample_mode) + '_' + mask_info + '_' + str(num_channels_real) + '_' + str(num_channel) + '.jpg'
+        name = img_name[:-4] + '_' + name + '_' + decoder_type + '_' + str(upsample_mode) +  '_mask_info_' + mask_info + '_filter_size_' +  str(filter_size) + '_channels_' + str(num_channels_real) + '_layers_' + str(num_layers) + '_input_size_' + str(input_size) + '_act_' + act_function +'.jpg'
         imsave(os.path.join(path, name), img.astype(np.uint8))
-          
+
 def fit(net,
         upsample_factor,
-        num_channels,
+        channels_times_layers,
         img_shape,
         image_mode,
         decoder_type,
@@ -333,7 +325,8 @@ def fit(net,
         type_measurements,
         num_measurements,
         num_channels_real,
-        num_channel,
+        num_layers,
+        act_function,
         y_feed,
         A_feed,
         mask_info1,
@@ -347,13 +340,16 @@ def fit(net,
         find_best=False,
         verbose=False,
         device='gpu:0',
-        input_size = 128 
+        input_size = 128,
+        random_vector = None, 
+        selection_mask = None,
+        save = True
        ):
     """Fit a model.
     
         Args: 
         net: the generative model
-        num_channels: Number of upsample channels #e.g.[k, k ,...] with shape of [1,6]
+        channels_times_layers: Number of upsample channels #e.g.[k, k ,...] with shape of [1,6]
         img_shape: original real image shape, a 4D tensor, e.g. [1,64,64,3] 
         type_measurements, num_measurements: the type and number of measurements 
         y_feed, A_feed: real oberservation y and measurment matrix A
@@ -376,13 +372,15 @@ def fit(net,
                 elif type_measurements == 'identity':
                     A = tf.placeholder(tf.float32, shape=(n_input, n_input), name='A') #e.g.[img_wid*img_high*3, img_wid*img_high*3]
                     y = tf.placeholder(tf.float32, shape=(1, n_input), name='y') #e.g.[1, img_wid*img_high*3]
+                elif type_measurements == 'circulant':
+                    y = tf.placeholder(tf.float32, shape=(1, n_input), name='y')#e.g.[1, img_wid*img_high*3]
             else:
                 y = tf.placeholder(tf.float32, shape=(1, img_shape[1], img_shape[2], img_shape[3]), name='y')
             
             # Define input uniform noise 
             if upsample_mode == 'bilinear':
                 ## -- fix output size only --##
-                #totalupsample = upsample_factor**len(num_channels) #e.g. 2^6, 1.5^3
+                #totalupsample = upsample_factor**len(num_layers) #e.g. 2^6, 1.5^3
                 #width = int(img_shape[1] / totalupsample)
                 #if image_mode == '1D':
                 #    height = int(img_shape[2])
@@ -399,7 +397,7 @@ def fit(net,
             elif upsample_mode == 'none':
                 width = int(img_shape[1])
                 height = int(img_shape[2])
-            z = tf.constant(np.random.uniform(size=[1, width, height, num_channels[0]]).astype(np.float32) * 1. / 10)
+            z = tf.constant(np.random.uniform(size=[1, width, height, channels_times_layers[0]]).astype(np.float32) * 1. / 10)
             z = tf.Variable(z, name='z', trainable=False)
             
             # Deep decoder prior 
@@ -407,9 +405,38 @@ def fit(net,
             x = feed_forward(z) #net_output with shape [1, img_wid, img_high, 3]               
             
             # Inverse problem 
+            def circulant_tf(signal_vector, random_vector, signal_size, selection_mask):  
+                signal_vector = tf.cast(signal_vector, dtype=tf.complex64, name='circulant_real2complex')
+                t = tf.convert_to_tensor(random_vector, dtype=tf.complex64)
+                #step 1: F^{-1} @ x
+                r1 = tf.signal.ifft(signal_vector, name='circulant_step1_ifft')               
+                #step 2: Diag() @ F^{-1} @ x
+                Ft = tf.signal.fft(t)
+                r2 = tf.multiply(r1, Ft, name='circulant_step2_diag')                
+                #step 3: F @ Diag() @ F^{-1} @ x
+                compressive = tf.signal.fft(r2, name='circulant_step3_fft')
+                float_compressive = tf.cast(compressive, tf.float32, name='circulant_complex2real')               
+                #step 4: R_{omega} @ C_{t}
+                select_compressive = tf.multiply(float_compressive, selection_mask, name='circulant_step4_A')            
+                return select_compressive
+            
             if mask_feed is None:
-                # Compressed sensing / Denoising          
-                y_hat = tf.matmul(tf.reshape(x, [1,-1]), A, name='y_hat')
+                # Compressed sensing / Denoising     
+                if type_measurements == 'circulant':
+                    # Flip
+                    a = []
+                    for i in range(tf.reshape(x, [1,-1]).shape.as_list()[-1]):
+                        if random.randint(1, 10000) <= int(10001/2):
+                            a.append(1)
+                        else:
+                            a.append(-1)
+                    arr = np.array(a)
+                    flip = tf.convert_to_tensor(arr, dtype=tf.float32)
+                    x_circulant =  tf.reshape(x, [1,-1]) * flip 
+                    # Circulant
+                    y_hat = circulant_tf(x_circulant, random_vector, n_input, selection_mask)
+                else:
+                    y_hat = tf.matmul(tf.reshape(x, [1,-1]), A, name='y_hat')
             else:
                 # Inpainting 
                 y_hat = x * mask_feed
@@ -454,7 +481,10 @@ def fit(net,
             
             # Feed dict
             if mask_feed is None:
-                feed_dict = {A: A_feed, y: y_feed}
+                if type_measurements == 'circulant':
+                    feed_dict = {y: y_feed}
+                else:
+                    feed_dict = {A: A_feed, y: y_feed}
             else:
                 feed_dict = {y: y_feed}
                 
@@ -491,16 +521,18 @@ def fit(net,
                     mask_info = mask_info1[8:-4]
                 elif image_mode == '2D' or '3D':
                     mask_info = mask_info2[8:-4]
-                #save_img(out_img, 'result/', img_name, '{}'.format(i + 1), image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_channel, mask_info)
-                #print('Best MSE (wrt noisy) {}: {}: {}: {}: {}: {}: {}: {}: {}'.format(num_channels_real, num_channel, img_name, mask_info, decoder_type, filter_size, upsample_mode, upsample_factor, best_mse))
+                if save:
+                    save_img(out_img, 'result/', img_name, '{}'.format(i + 1), image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_layers, input_size, mask_info, act_function)
+                #print('Best MSE (wrt noisy) {}: {}: {}: {}: {}: {}: {}: {}: {}'.format(num_channels_real, num_layers, img_name, mask_info, decoder_type, filter_size, upsample_mode, upsample_factor, best_mse))
             else:
                 out_img = sess.run(x)
                 if image_mode == '1D':
                     mask_info = mask_info1[8:-4]
                 elif image_mode == '2D' or '3D':
                     mask_info = mask_info2[8:-4]
-                #save_img(out_img, 'result/', img_name, '{}'.format(i + 1), image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_channel, mask_info)
-                #print('FINAL MSE (wrt noisy) {}: {}: {}: {}: {}: {}: {}: {}: {}'.format(num_channels_real, num_channel, img_name, mask_info, decoder_type, filter_size, upsample_mode, upsample_factor, mse[-1]))
+                if save:
+                    save_img(out_img, 'result/', img_name, '{}'.format(i + 1), image_mode, decoder_type, filter_size, upsample_mode, num_channels_real, num_layers, input_size, mask_info, act_function)
+                #print('FINAL MSE (wrt noisy) {}: {}: {}: {}: {}: {}: {}: {}: {}'.format(num_channels_real, num_layers, img_name, mask_info, decoder_type, filter_size, upsample_mode, upsample_factor, mse[-1]))
             if verbose:
                 return mse, out_img, num_params
             else:
@@ -508,15 +540,20 @@ def fit(net,
     
   
 # == main part == #
-def load_1D(path, img_name):
+def load_1D(path, img_name, type, flip):
     img_path = os.path.join(path, img_name)
     img = np.load(img_path)
+    # Flip
+    if type == 'denoising' and flip == 'circulant':
+        for i in range(img.shape[0]):
+            if random.randint(1, 10000) <= int(10001/2):
+                img[i] = img[i]*-1
     img = img[:, None]
     img = img[:, :, None]
     img = img[None, :, :, :]
     return img
 
-def load_2D(path, img_name):
+def load_2D(path, img_name): #might need to be fliped later 
     img_path = os.path.join(path, img_name)
     img = np.load(img_path)
     if len(img.shape) == 2:
@@ -540,15 +577,23 @@ def get_l2_loss(image1, image2):
 def load_mask(path, img_name): 
     img_path = os.path.join(path, img_name)
     img = np.load(img_path)
-    if len(img.shape) == 2:
-        img = img[:, :, None]
+    if len(img.shape) == 1:
+        img = img[:, None]
+    img = img[:, :, None]
     img = img[None, :, :, :]
     return img
+
+def create_A_selection(signal_size, measurement_size):
+    mask_ = np.zeros((1,signal_size))
+    idx_list = np.random.choice(signal_size, measurement_size, replace=False)
+    for idx in idx_list:
+        mask_[:,idx] = 1.0 
+    return mask_
 
 def main(hparams):
     # Get inputs
     if hparams.image_mode == '1D':
-        x_real = np.array(load_1D(hparams.path, hparams.img_name)).astype(np.float32)
+        x_real = np.array(load_1D(hparams.path, hparams.img_name, hparams.model_type, hparams.type_measurements)).astype(np.float32)
     elif hparams.image_mode == '2D':
         x_real = np.array(load_2D(hparams.path, hparams.img_name)).astype(np.float32)
     else:
@@ -556,12 +601,33 @@ def main(hparams):
     
     # Construct measurements/noises for compressed sensing 
     mea_shape = x_real.shape[1] * x_real.shape[2] * x_real.shape[3] #i.e. img_wid*img_wid*3
+    random_vector = None #initialization 
+    A = None #initialization
+    selection_mask = None #initialization
     if hparams.type_measurements == 'random':
         A = np.random.randn(mea_shape, hparams.num_measurements).astype(np.float32)
         noise_shape = [1, hparams.num_measurements]
     elif hparams.type_measurements == 'identity':
         A = np.identity(mea_shape).astype(np.float32)
         noise_shape = [1, mea_shape]
+    elif hparams.type_measurements == 'circulant':
+        random_vector = np.random.normal(size=mea_shape)
+        selection_mask = create_A_selection(mea_shape, hparams.num_measurements)
+        noise_shape = [1, mea_shape]   
+        
+    def circulant_np(signal_vector, random_vector, signal_size, selection_mask):
+        #step 1: F^{-1} @ x
+        r1 = ifft(signal_vector)
+        #step 2: Diag() @ F^{-1} @ x
+        Ft = fft(random_vector) 
+        r2 = np.multiply(r1, Ft)
+        #step 3: F @ Diag() @ F^{-1} @ x
+        compressive = fft(r2)
+        #step 4:  R_{omega} @ C_{t} @ D){epsilon}
+        compressive = compressive.real
+        select_compressive = compressive * selection_mask
+        return select_compressive
+    
     observ_noise = hparams.noise_level * np.random.randn(noise_shape[0], noise_shape[1])
     
     # Construct mask for inpainting
@@ -577,27 +643,36 @@ def main(hparams):
     if hparams.model_type == 'inpainting':
         y_real = x_real * mask #shape [1, img_wid, img_high, channels]
     elif hparams.model_type == 'denoising':
-        y_real = np.matmul(x_real.reshape(1,-1), A) + observ_noise #noise level with shape [10,100]
+        if hparams.type_measurements == 'circulant':
+            y_real = circulant_np(x_real.reshape(1,-1), random_vector, mea_shape, selection_mask) + observ_noise
+        else:
+            y_real = np.matmul(x_real.reshape(1,-1), A) + observ_noise #noise level with shape [10,100]
     #y_name = hparams.image_mode + '_y_' + hparams.decoder_type + '_' + str(hparams.filter_size) + '_' + hparams.upsample_mode + '.npy'
     #np.save(os.path.join('result/', y_name), y_real[0,:,:,0])
     
-    # Define num_channles 
-    num_channels = [hparams.k]*hparams.num_channel   
+    # Define channles*layers 
+    channels_times_layers = [hparams.k]*hparams.num_layers   
+
+    # Define activations
+    act_function = hparams.activation
     
     # Define decoder network 
     if hparams.decoder_type == 'original': 
-        net_fn =  partial(decodernw, num_output_channels=x_real.shape[-1], num_channels_up=num_channels, image_mode=hparams.image_mode, upsample_mode=hparams.upsample_mode, factor=hparams.upsample_factor, input_size=hparams.input_size)
+        net_fn =  partial(decodernw, num_output_channels=x_real.shape[-1], channels_times_layers=channels_times_layers, image_mode=hparams.image_mode, 
+                upsample_mode=hparams.upsample_mode, factor=hparams.upsample_factor, input_size=hparams.input_size, act_fun=act_function)
     elif hparams.decoder_type == 'fixed_deconv':  
-        net_fn =  partial(fixed_decodernw, num_output_channels=x_real.shape[-1], num_channels_up=num_channels, image_mode=hparams.image_mode, upsample_mode=hparams.upsample_mode, filter_size=hparams.filter_size, factor=hparams.upsample_factor, input_size=hparams.input_size)
+        net_fn =  partial(fixed_decodernw, num_output_channels=x_real.shape[-1], channels_times_layers=channels_times_layers, image_mode=hparams.image_mode, 
+                upsample_mode=hparams.upsample_mode, filter_size=hparams.filter_size, factor=hparams.upsample_factor, input_size=hparams.input_size, act_fun=act_function)
     elif hparams.decoder_type == 'deconv':  
-        net_fn =  partial(deconv_decoder, num_output_channels=x_real.shape[-1], num_channels_up=num_channels, image_mode=hparams.image_mode, upsample_mode=hparams.upsample_mode, filter_size=hparams.filter_size, factor=hparams.upsample_factor, input_size=hparams.input_size)
+        net_fn =  partial(deconv_decoder, num_output_channels=x_real.shape[-1], channels_times_layers=channels_times_layers, image_mode=hparams.image_mode, 
+                upsample_mode=hparams.upsample_mode, filter_size=hparams.filter_size, factor=hparams.upsample_factor, input_size=hparams.input_size, act_fun=act_function)
 
     
     # Fit in
     #print('current number of channels: {}'.format(hparams.k))
     mse, out_img, nparms = fit(net=net_fn,
                            upsample_factor=hparams.upsample_factor,
-                           num_channels=num_channels,
+                           channels_times_layers=channels_times_layers,
                            img_shape=x_real.shape,
                            image_mode=hparams.image_mode,
                            decoder_type=hparams.decoder_type,
@@ -607,7 +682,8 @@ def main(hparams):
                            type_measurements=hparams.type_measurements,
                            num_measurements=hparams.num_measurements,
                            num_channels_real = hparams.k,
-                           num_channel = hparams.num_channel,
+                           num_layers = hparams.num_layers,
+                           act_function = act_function,
                            y_feed=y_real,
                            A_feed=A,
                            mask_info1=hparams.mask_name_1D,
@@ -617,7 +693,10 @@ def main(hparams):
                            num_iter=hparams.numit,
                            find_best=True,
                            verbose=True,
-                           input_size=hparams.input_size)
+                           input_size=hparams.input_size,
+                           random_vector=random_vector,
+                           selection_mask=selection_mask,
+                           save = True)
     #out_img = out_img[0] #4D tensor to 3D tensor if need to plot 
     
     # Compute and print measurement and l2 loss
@@ -626,28 +705,45 @@ def main(hparams):
     psnr = 10 * np.log10(1 * 1 / l2_losses) #PSNR
     #print ('Final measurement loss is {}'.format(measurement_losses))
     print ('Final number of params is {}'.format(nparms))
-    if hparams.image_mode == '1D':
-        mask_info = hparams.mask_name_1D[8:-4]
-    elif image_mode == '2D' or '3D':
-        mask_info = hparams.mask_name_2D[8:-4]
-    print ('Final representation PSNR for img_name:{}, mask:{}, decoder:{}, filter:{}, upsample:{}, channels:{} layers:{} upsample_factor:{} is {}'.format(hparams.img_name, mask_info, hparams.decoder_type, hparams.filter_size, hparams.upsample_mode, hparams.k, hparams.num_channel, hparams.upsample_factor, psnr))
     
-    #### to pd frame 
-    pickle_file_path = hparams.pickle_file_path
+    if hparams.model_type == 'inpainting':
+        if hparams.image_mode == '1D':
+            mask_info = hparams.mask_name_1D[8:-4]
+        elif image_mode == '2D' or '3D':
+            mask_info = hparams.mask_name_2D[8:-4]
+        type_mea_info = 'NA'
+        num_mea_info = 'NA'
+    else:
+        mask_info = 'NA'
+        type_mea_info = hparams.type_measurements
+        num_mea_info = hparams.num_measurements
+    
     if hparams.upsample_factor:
         factor_record = hparams.upsample_factor
     else:
-        factor_record = round(1 * pow(4096/hparams.input_size, 1/(hparams.num_channel-1)), 2)
+        factor_record = round(1 * pow(4096/hparams.input_size, 1/hparams.num_layers), 4)
+        
+    print ('Final representation PSNR for img_name:{}, model_type:{}, type_mea:{}, num_mea:{}, mask:{}, decoder:{}, \
+          filter_size:{}, upsample_mode:{}, #channels:{} #layers:{} up_factor:{} input_size:{} act_func:{} is {}'.format(hparams.img_name, 
+            hparams.model_type, type_mea_info, num_mea_info, mask_info, 
+            hparams.decoder_type, hparams.filter_size, hparams.upsample_mode, hparams.k, hparams.num_layers, factor_record, hparams.input_size, hparams.activation, psnr))
     
-    if not os.path.exists(pickle_file_path):
-        d = {'img_name':[hparams.img_name], 'mask_info':[mask_info], 'decoder_type':[hparams.decoder_type], 'filter_size':[hparams.filter_size], 'upsample_mode':[hparams.upsample_mode], 'channels':[hparams.k], 'layers':hparams.num_channel, 'up_factor':factor_record, 'input_size':hparams.input_size, 'psnr':[psnr]}
-        df = pd.DataFrame(data=d)
-        df.to_pickle(pickle_file_path)
-    else:
-        d = {'img_name':hparams.img_name, 'mask_info':mask_info, 'decoder_type':hparams.decoder_type, 'filter_size':hparams.filter_size, 'upsample_mode':hparams.upsample_mode, 'channels':hparams.k, 'layers':hparams.num_channel, 'up_factor':factor_record, 'input_size':hparams.input_size, 'psnr':psnr}
-        df = pd.read_pickle(pickle_file_path)
-        df = df.append(d, ignore_index=True)
-        df.to_pickle(pickle_file_path)
+    #### to pd frame 
+    if hparams.hyperband_mode == 0:
+        pickle_file_path = hparams.pickle_file_path
+        if not os.path.exists(pickle_file_path):
+            d = {'img_name':[hparams.img_name], 'model_type':[hparams.model_type], 'type_mea':[type_mea_info], 'num_mea':[num_mea_info], 'mask_info':[mask_info], 
+                'decoder_type':[hparams.decoder_type], 'filter_size':[hparams.filter_size], 'upsample_mode':[hparams.upsample_mode], 
+                'channels':[hparams.k], 'layers':[hparams.num_layers], 'up_factor':[factor_record], 'input_size':[hparams.input_size], 'act_func':[hparams.activation], 'psnr':[psnr]}
+            df = pd.DataFrame(data=d)
+            df.to_pickle(pickle_file_path)
+        else:
+            d = {'img_name':hparams.img_name, 'model_type':hparams.model_type, 'type_mea':type_mea_info, 'num_mea':num_mea_info, 'mask_info':mask_info, 
+                'decoder_type':hparams.decoder_type, 'filter_size':hparams.filter_size, 'upsample_mode':hparams.upsample_mode, 
+                'channels':hparams.k, 'layers':hparams.num_layers, 'up_factor':factor_record, 'input_size':hparams.input_size, 'act_func':hparams.activation, 'psnr':psnr}
+            df = pd.read_pickle(pickle_file_path)
+            df = df.append(d, ignore_index=True)
+            df.to_pickle(pickle_file_path)
     ####
     
     print('END')
@@ -662,25 +758,25 @@ if __name__ == '__main__':
     # Input
     PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
     PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
-    PARSER.add_argument('--noise_level', type=float, default=0.05, help='std dev of noise') ###################################
+    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') ###################################
     PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
-    PARSER.add_argument('--model_type', type=str, default='denoising', help='inverse problem model type') ###################################
+    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') ##################################
+    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') ###################################
+    PARSER.add_argument('--num_measurements', type=int, default=1000, help='number of gaussian measurements') ###################################
     PARSER.add_argument('--mask_name_1D', type=str, default='', help='mask to use') ###################################
     PARSER.add_argument('--mask_name_2D', type=str, default='', help='mask to use') ###################################
-    PARSER.add_argument('--pickle_file_path', type=str, default='result_sep_17_model_1.pkl') #######################################
-    
-    # Measurement type specific hparams
-    PARSER.add_argument('--type_measurements', type=str, default='identity', help='measurement type')
-    PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements')
+    PARSER.add_argument('--pickle_file_path', type=str, default='nov30_block_chanel.pkl') #######################################
+    PARSER.add_argument('--hyperband_mode', type=int, default=0) #######################################
 
     # Deep decoder 
     PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') ###################################
-    PARSER.add_argument('--num_channel', type=int, default=6, help='number of upsample channles')
+    PARSER.add_argument('--num_layers', type=int, default=6, help='number of upsample layers')
     PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') ###################################
     PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') ###################################
-    PARSER.add_argument('--filter_size', type=int, default=4, help='upsample type') ###################################
+    PARSER.add_argument('--filter_size', type=int, default=8, help='upsample type') ###################################
     PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') ###################################
     PARSER.add_argument('--input_size', type=int, default=128, help='input_size') ###################################
+    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') ###################################
     
     # "Training"
     PARSER.add_argument('--rn', type=float, default=0, help='reg_noise_std')
