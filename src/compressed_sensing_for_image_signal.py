@@ -1,25 +1,22 @@
 """Compressed sensing main script"""
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" #tunable
 import numpy as np
 import tensorflow as tf
-#print('Tensorflow version', tf.__version__)
+#print('Tensorflow version', tf.__version__) #if your tf version is above 2.0, use next tow lines of code instead 
+#import tensorflow.compat.v1 as tf
+#tf.disable_v2_behavior()
 from functools import partial
 from skimage.io import imread, imsave
 from skimage.color import rgb2gray, rgba2rgb, gray2rgb
-#from skimage.color import rgb2gray, rgba2rgb
-#from matplotlib import pyplot as plt
 from argparse import ArgumentParser
 import math
 import pandas as pd 
-#from scipy.linalg import dft
 from scipy.fftpack import fft, ifft
-#from scipy.sparse import diags
-#from scipy import linalg
 import random
 
 
-# == decoder part == #
+# == basic decoder component == #
 def _pad(x, kernel_size, pad):
     to_pad = int((kernel_size - 1) / 2)
     if to_pad > 0 and pad == 'reflection':
@@ -54,12 +51,12 @@ def _upsample(i, x, upsample_mode, image_mode, factor=None, layer=None, input_si
                 new_shape = tf.stack([w_new, h_new], axis=0)
             x = tf.image.resize_images(x, new_shape, align_corners=True, method=getattr(tf.image.ResizeMethod, upsample_mode.upper()))
             return x
-            
-        
-                          
+                                   
 def _bn(x, bn_affine):
     return tf.layers.batch_normalization(x, trainable=bn_affine, momentum=0.9, epsilon=1e-5, training=True)      
 
+
+# == decoder variants 0 == #
 def decodernw(inputs,
               num_output_channels=3, 
               channels_times_layers=[128] * 6,
@@ -112,9 +109,7 @@ def decodernw(inputs,
     return net #Outputs a 4D Tensor (batch, width*2^6, height*2^6, channels=3) 
 
 
-
-
-# == decoder variants 1/3 == #
+# == decoder variants 1&3 == #
 def kernel_build(a, iter):
     output = np.zeros((iter, iter, a.shape[0], a.shape[1]))
     for i in range(iter):
@@ -221,9 +216,7 @@ def fixed_decodernw(inputs,
     return net #Outputs a 4D Tensor (batch, width*2^6, height*2^6, channels=3)
 
 
-
-
-# == decoder variants 2/4 == #
+# == decoder variants 2&4 == #
 def deconv_decoder(
         inputs,
         num_output_channels=3, 
@@ -280,7 +273,7 @@ def deconv_decoder(
 
 
 # == fit part == #
-def get_num_params():######################################
+def get_num_params():
     total_parameters = 0
     for variable in tf.trainable_variables(scope="DeepDecoder"):
         params = 1
@@ -441,7 +434,6 @@ def fit(net,
                 # Inpainting 
                 y_hat = x * mask_feed
                 
-        
             # Define loss  
             mse = tf.losses.mean_squared_error
             loss = mse(y, y_hat)            
@@ -460,7 +452,6 @@ def fit(net,
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
                 train_op = optimizer.minimize(loss, global_step=global_step)    
-
 
         with tf.Session() as sess:
             # Init            
@@ -537,6 +528,8 @@ def fit(net,
                 return mse, out_img, num_params
             else:
                 return mse, out_img
+    
+    
     
   
 # == main part == #
@@ -667,7 +660,6 @@ def main(hparams):
         net_fn =  partial(deconv_decoder, num_output_channels=x_real.shape[-1], channels_times_layers=channels_times_layers, image_mode=hparams.image_mode, 
                 upsample_mode=hparams.upsample_mode, filter_size=hparams.filter_size, factor=hparams.upsample_factor, input_size=hparams.input_size, act_fun=act_function)
 
-    
     # Fit in
     #print('current number of channels: {}'.format(hparams.k))
     mse, out_img, nparms = fit(net=net_fn,
@@ -728,7 +720,7 @@ def main(hparams):
             hparams.model_type, type_mea_info, num_mea_info, mask_info, 
             hparams.decoder_type, hparams.filter_size, hparams.upsample_mode, hparams.k, hparams.num_layers, factor_record, hparams.input_size, hparams.activation, psnr))
     
-    #### to pd frame 
+    # To pd frame 
     if hparams.hyperband_mode == 0:
         pickle_file_path = hparams.pickle_file_path
         if not os.path.exists(pickle_file_path):
@@ -744,8 +736,8 @@ def main(hparams):
             df = pd.read_pickle(pickle_file_path)
             df = df.append(d, ignore_index=True)
             df.to_pickle(pickle_file_path)
-    ####
     
+    # End
     print('END')
     print('\t')
 
@@ -756,27 +748,27 @@ if __name__ == '__main__':
     PARSER = ArgumentParser()
  
     # Input
-    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
+    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') 
     PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
-    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') ###################################
-    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
-    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') ##################################
-    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') ###################################
-    PARSER.add_argument('--num_measurements', type=int, default=1000, help='number of gaussian measurements') ###################################
-    PARSER.add_argument('--mask_name_1D', type=str, default='', help='mask to use') ###################################
-    PARSER.add_argument('--mask_name_2D', type=str, default='', help='mask to use') ###################################
-    PARSER.add_argument('--pickle_file_path', type=str, default='nov30_block_chanel.pkl') #######################################
-    PARSER.add_argument('--hyperband_mode', type=int, default=0) #######################################
+    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') 
+    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') 
+    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') 
+    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') 
+    PARSER.add_argument('--num_measurements', type=int, default=1000, help='number of gaussian measurements') 
+    PARSER.add_argument('--mask_name_1D', type=str, default='', help='mask to use') 
+    PARSER.add_argument('--mask_name_2D', type=str, default='', help='mask to use') 
+    PARSER.add_argument('--pickle_file_path', type=str, default='nov30_block_chanel.pkl') 
+    PARSER.add_argument('--hyperband_mode', type=int, default=0) 
 
     # Deep decoder 
-    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') ###################################
+    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') 
     PARSER.add_argument('--num_layers', type=int, default=6, help='number of upsample layers')
-    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') ###################################
-    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') ###################################
-    PARSER.add_argument('--filter_size', type=int, default=8, help='upsample type') ###################################
-    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') ###################################
-    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') ###################################
-    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') ###################################
+    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') 
+    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') 
+    PARSER.add_argument('--filter_size', type=int, default=8, help='upsample type') 
+    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') 
+    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') 
+    PARSER.add_argument('--activation', type=str, default='relu', help='activation type')
     
     # "Training"
     PARSER.add_argument('--rn', type=float, default=0, help='reg_noise_std')
