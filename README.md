@@ -1,6 +1,6 @@
 # compressd-sensing
 
-This repository provides codes for project of Compressed Sensing with Deep Decoder Prior in implementation of both tensorflow and pytorch (Torch implementation is depreciated).
+This repository provides codes for project of Compressed Sensing with Deep Decoder Prior in implementation of both tensorflow and pytorch. (Torch implementation is depreciated)
 
 ## Requirements
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
