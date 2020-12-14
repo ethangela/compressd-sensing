@@ -36,7 +36,7 @@ def sample_from_2D_Gaussian(size, ker, l, idx):
     
     #scale to range(0,1)
     z = (z - np.min(z))/np.ptp(z)
-    name = 'image/Gaussian signal/2D_' + ker +'_'+ str(l) +'_'+ str(size) +'_'+ str(idx) + '.npy'
+    name = '../image/Gaussian signal/2D_' + ker +'_'+ str(l) +'_'+ str(size) +'_'+ str(idx) + '.npy'
     np.save(name, z)
     #print(z)
     
