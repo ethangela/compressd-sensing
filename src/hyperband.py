@@ -1,16 +1,19 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" #tunable and depends on the number of available GPUs
 import numpy as np
 import tensorflow as tf
+#print('Tensorflow version', tf.__version__) #if your tf version is above 2.0, use next tow lines of code instead 
+#import tensorflow.compat.v1 as tf
+#tf.disable_v2_behavior()
 from functools import partial
 from skimage.io import imread, imsave
 from skimage.color import rgb2gray, rgba2rgb, gray2rgb
 from argparse import ArgumentParser
 import math
 import pandas as pd 
-from compressed_sensing_for_image_signal import * #from compressed_sensing_for_image_signal import * ##################################
+from compressed_sensing_for_image_signal import * 
 import pickle
 import itertools
 
@@ -190,39 +193,39 @@ def successive_halving(hparams, eta=3, max_iter=8192):
     return T #[(32,3,64,3]
     
 
-def greedy(hparams, num_iters=8000):
-    hyperparameters = get_random_hyperparameter_configuration(success_halving=False)
-    decoder_type, upsample_mode, chn_lst, lay_list, ipt_list, fil_list = 'fixed_deconv', 'bilinear', hyperparameters[0], hyperparameters[1], hyperparameters[2], hyperparameters[3]
-    baseline = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil_list[0], num_iters)
-    chn_per, lay_per, ipt_per, fil_per = [], [], [], []
+# def greedy(hparams, num_iters=8000):
+#     hyperparameters = get_random_hyperparameter_configuration(success_halving=False)
+#     decoder_type, upsample_mode, chn_lst, lay_list, ipt_list, fil_list = 'fixed_deconv', 'bilinear', hyperparameters[0], hyperparameters[1], hyperparameters[2], hyperparameters[3]
+#     baseline = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil_list[0], num_iters)
+#     chn_per, lay_per, ipt_per, fil_per = [], [], [], []
 
-    for chn in chn_lst[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn, lay_list[0], ipt_list[0], fil_list[0], num_iters)
-        diff = psnr - baseline 
-        chn_per.append(diff)
+#     for chn in chn_lst[1:]:
+#         psnr = main_return(hparams, decoder_type, upsample_mode, chn, lay_list[0], ipt_list[0], fil_list[0], num_iters)
+#         diff = psnr - baseline 
+#         chn_per.append(diff)
 
-    for lay in lay_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay, ipt_list[0], fil_list[0], num_iters)
-        diff = psnr - baseline 
-        lay_per.append(diff)
+#     for lay in lay_list[1:]:
+#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay, ipt_list[0], fil_list[0], num_iters)
+#         diff = psnr - baseline 
+#         lay_per.append(diff)
 
-    for ipt in ipt_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt, fil_list[0], num_iters)
-        diff = psnr - baseline 
-        ipt_per.append(diff)
+#     for ipt in ipt_list[1:]:
+#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt, fil_list[0], num_iters)
+#         diff = psnr - baseline 
+#         ipt_per.append(diff)
 
-    for fil in fil_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil, num_iters)
-        diff = psnr - baseline 
-        fil_per.append(diff)
+#     for fil in fil_list[1:]:
+#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil, num_iters)
+#         diff = psnr - baseline 
+#         fil_per.append(diff)
 
-    print(hparams.img_name)
-    print('chn: ', chn_per)
-    print('lay: ', lay_per)
-    print('ipt: ', ipt_per)
-    print('fil: ', fil_per)
-    print('End')
-    print('\n')
+#     print(hparams.img_name)
+#     print('chn: ', chn_per)
+#     print('lay: ', lay_per)
+#     print('ipt: ', ipt_per)
+#     print('fil: ', fil_per)
+#     print('End')
+#     print('\n')
 
     
     
@@ -231,28 +234,28 @@ if __name__ == '__main__':
     PARSER = ArgumentParser()
  
     # Input
-    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
-    PARSER.add_argument('--path', type=str, default='', help='path stroing the images')
-    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') ###################################
-    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
-    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') ##################################
-    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') ###################################
-    PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements') ###################################
-    PARSER.add_argument('--mask_name_1D', type=str, default='', help='mask to use') ###################################
-    PARSER.add_argument('--mask_name_2D', type=str, default='', help='mask to use') ###################################
-    PARSER.add_argument('--pickle_file_path', type=str, default='hyperband_rsl.pkl') #######################################
-    PARSER.add_argument('--hyperband_mode', type=int, default=1) #######################################
-    PARSER.add_argument('--selection_type', type=str, default='greedy') #######################################
+    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') 
+    PARSER.add_argument('--path', type=str, default='image/Gaussian signal', help='path stroing the images')
+    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') 
+    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') 
+    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') 
+    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') 
+    PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements') 
+    PARSER.add_argument('--mask_name_1D', type=str, default='mask/1D_rbf_3.0_1.npy', help='mask to use') 
+    PARSER.add_argument('--mask_name_2D', type=str, default='mask/2D_rbf_3.0_1.npy', help='mask to use') 
+    PARSER.add_argument('--pickle_file_path', type=str, default='hyperband_rsl.pkl') 
+    PARSER.add_argument('--hyperband_mode', type=int, default=1) 
+    PARSER.add_argument('--selection_type', type=str, default='successive_halving') 
 
     # Deep decoder 
-    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') ###################################
-    PARSER.add_argument('--num_channel', type=int, default=6, help='number of upsample channles') ###################################
-    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') ###################################
-    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') ###################################
-    PARSER.add_argument('--filter_size', type=int, default=4, help='upsample type') ###################################
-    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') ###################################
-    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') ###################################
-    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') ###################################
+    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') 
+    PARSER.add_argument('--num_channel', type=int, default=6, help='number of upsample channles') 
+    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') 
+    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') 
+    PARSER.add_argument('--filter_size', type=int, default=4, help='upsample type') 
+    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') 
+    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') 
+    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') 
     
     # "Training"
     PARSER.add_argument('--rn', type=float, default=0, help='reg_noise_std')
