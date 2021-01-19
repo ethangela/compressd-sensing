@@ -193,41 +193,7 @@ def successive_halving(hparams, eta=3, max_iter=8192):
         print('#config is {}, #iters is {}, loss criteria is {}'.format(int(n_i), int(r_i), val_PSNR[descending_sort_idx[int(n_i/eta)-1]]))
     
     return T #[(32,3,64,3]
-    
 
-def greedy(hparams, num_iters=8000):
-    hyperparameters = get_random_hyperparameter_configuration(success_halving=False)
-    decoder_type, upsample_mode, chn_lst, lay_list, ipt_list, fil_list = 'fixed_deconv', 'bilinear', hyperparameters[0], hyperparameters[1], hyperparameters[2], hyperparameters[3]
-    baseline = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil_list[0], num_iters)
-    chn_per, lay_per, ipt_per, fil_per = [], [], [], []
-
-    for chn in chn_lst[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn, lay_list[0], ipt_list[0], fil_list[0], num_iters)
-        diff = psnr - baseline 
-        chn_per.append(diff)
-
-    for lay in lay_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay, ipt_list[0], fil_list[0], num_iters)
-        diff = psnr - baseline 
-        lay_per.append(diff)
-
-    for ipt in ipt_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt, fil_list[0], num_iters)
-        diff = psnr - baseline 
-        ipt_per.append(diff)
-
-    for fil in fil_list[1:]:
-        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil, num_iters)
-        diff = psnr - baseline 
-        fil_per.append(diff)
-
-    print(hparams.img_name)
-    print('chn: ', chn_per)
-    print('lay: ', lay_per)
-    print('ipt: ', ipt_per)
-    print('fil: ', fil_per)
-    print('End')
-    print('\n')
     
         
 if __name__ == '__main__':
