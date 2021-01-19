@@ -21,7 +21,7 @@ import itertools
 def main_return(hparams, decoder_type, upsample_mode, channel, layer, input_size, filter_size, numit): 
     # Get inputs
     if hparams.image_mode == '1D':
-        x_real = np.array(load_1D(hparams.path, hparams.img_name, hparams.model_type, hparams.type_measurements)).astype(np.float32)
+        x_real = np.array(load_1D(hparams.path, hparams.img_name)).astype(np.float32)
     elif hparams.image_mode == '2D':
         x_real = np.array(load_2D(hparams.path, hparams.img_name)).astype(np.float32)
     else:
@@ -55,7 +55,8 @@ def main_return(hparams, decoder_type, upsample_mode, channel, layer, input_size
         compressive = compressive.real
         select_compressive = compressive * selection_mask
         return select_compressive
-    
+   
+    random_arr = random_flip(4096)
     observ_noise = hparams.noise_level * np.random.randn(noise_shape[0], noise_shape[1])
     
     # Construct mask for inpainting
@@ -64,15 +65,15 @@ def main_return(hparams, decoder_type, upsample_mode, channel, layer, input_size
             mask = load_mask(hparams.path, hparams.mask_name_1D)
         elif image_mode == '2D' or '3D':
             mask = load_mask(hparams.path, hparams.mask_name_2D)
-    elif hparams.model_type == 'denoising':
+    elif hparams.model_type == 'denoising' or 'compressing':
         mask = None 
     
     # Construct observation 
     if hparams.model_type == 'inpainting':
         y_real = x_real * mask #shape [1, img_wid, img_high, channels]
-    elif hparams.model_type == 'denoising':
+    elif hparams.model_type == 'denoising' or 'compressing':
         if hparams.type_measurements == 'circulant':
-            y_real = circulant_np(x_real.reshape(1,-1), random_vector, mea_shape, selection_mask) + observ_noise 
+            y_real = circulant_np(x_real.reshape(1,-1)*random_arr, random_vector, mea_shape, selection_mask) + observ_noise 
         else:
             y_real = np.matmul(x_real.reshape(1,-1), A) + observ_noise #noise level with shape [10,100]
     
@@ -121,7 +122,8 @@ def main_return(hparams, decoder_type, upsample_mode, channel, layer, input_size
                            input_size=input_size,
                            random_vector=random_vector,
                            selection_mask=selection_mask,
-                           save = False)
+                           save = False,
+                           random_array=random_arr)
     #out_img = out_img[0] #4D tensor to 3D tensor if need to plot 
     
     # Compute PSNR
@@ -154,10 +156,10 @@ def main_return(hparams, decoder_type, upsample_mode, channel, layer, input_size
 
 
 def get_random_hyperparameter_configuration(success_halving=True):
-    channel_list = [100,200,300,400,600] 
-    layer_list = [32,8,20,44,64] 
-    input_size_list = [12,2,4,8,14,16,20,24,36] 
-    filter_size_list = [6,4,8,10,12,14,16] 
+    channel_list = [80,100,120,150,170,200,230,250,280]
+    layer_list = [20,42,45,47,50,52]
+    input_size_list = [14,17,20,23,26,29,32,35,50,70]
+    filter_size_list = [4] 
     #model_type_list = [('original','bilinear'),('fixed_deconv','bilinear'),('fixed_deconv','none'),('deconv','bilinear'),('deconv','none')] #5
     configurations = list(itertools.product(channel_list, layer_list, input_size_list, filter_size_list)) #4*7*7*5 = 980
     if success_halving:
@@ -193,90 +195,91 @@ def successive_halving(hparams, eta=3, max_iter=8192):
     return T #[(32,3,64,3]
     
 
-# def greedy(hparams, num_iters=8000):
-#     hyperparameters = get_random_hyperparameter_configuration(success_halving=False)
-#     decoder_type, upsample_mode, chn_lst, lay_list, ipt_list, fil_list = 'fixed_deconv', 'bilinear', hyperparameters[0], hyperparameters[1], hyperparameters[2], hyperparameters[3]
-#     baseline = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil_list[0], num_iters)
-#     chn_per, lay_per, ipt_per, fil_per = [], [], [], []
+def greedy(hparams, num_iters=8000):
+    hyperparameters = get_random_hyperparameter_configuration(success_halving=False)
+    decoder_type, upsample_mode, chn_lst, lay_list, ipt_list, fil_list = 'fixed_deconv', 'bilinear', hyperparameters[0], hyperparameters[1], hyperparameters[2], hyperparameters[3]
+    baseline = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil_list[0], num_iters)
+    chn_per, lay_per, ipt_per, fil_per = [], [], [], []
 
-#     for chn in chn_lst[1:]:
-#         psnr = main_return(hparams, decoder_type, upsample_mode, chn, lay_list[0], ipt_list[0], fil_list[0], num_iters)
-#         diff = psnr - baseline 
-#         chn_per.append(diff)
+    for chn in chn_lst[1:]:
+        psnr = main_return(hparams, decoder_type, upsample_mode, chn, lay_list[0], ipt_list[0], fil_list[0], num_iters)
+        diff = psnr - baseline 
+        chn_per.append(diff)
 
-#     for lay in lay_list[1:]:
-#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay, ipt_list[0], fil_list[0], num_iters)
-#         diff = psnr - baseline 
-#         lay_per.append(diff)
+    for lay in lay_list[1:]:
+        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay, ipt_list[0], fil_list[0], num_iters)
+        diff = psnr - baseline 
+        lay_per.append(diff)
 
-#     for ipt in ipt_list[1:]:
-#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt, fil_list[0], num_iters)
-#         diff = psnr - baseline 
-#         ipt_per.append(diff)
+    for ipt in ipt_list[1:]:
+        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt, fil_list[0], num_iters)
+        diff = psnr - baseline 
+        ipt_per.append(diff)
 
-#     for fil in fil_list[1:]:
-#         psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil, num_iters)
-#         diff = psnr - baseline 
-#         fil_per.append(diff)
+    for fil in fil_list[1:]:
+        psnr = main_return(hparams, decoder_type, upsample_mode, chn_lst[0], lay_list[0], ipt_list[0], fil, num_iters)
+        diff = psnr - baseline 
+        fil_per.append(diff)
 
-#     print(hparams.img_name)
-#     print('chn: ', chn_per)
-#     print('lay: ', lay_per)
-#     print('ipt: ', ipt_per)
-#     print('fil: ', fil_per)
-#     print('End')
-#     print('\n')
-
-    
+    print(hparams.img_name)
+    print('chn: ', chn_per)
+    print('lay: ', lay_per)
+    print('ipt: ', ipt_per)
+    print('fil: ', fil_per)
+    print('End')
+    print('\n')
     
         
 if __name__ == '__main__':
     PARSER = ArgumentParser()
  
     # Input
-    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') 
-    PARSER.add_argument('--path', type=str, default='../image/Gaussian signal', help='path stroing the images')
-    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') 
-    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') 
-    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') 
-    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') 
-    PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements') 
-    PARSER.add_argument('--mask_name_1D', type=str, default='../mask/1D_rbf_3.0_1.npy', help='mask to use') 
-    PARSER.add_argument('--mask_name_2D', type=str, default='../mask/2D_rbf_3.0_1.npy', help='mask to use') 
-    PARSER.add_argument('--pickle_file_path', type=str, default='hyperband_rsl.pkl') 
-    PARSER.add_argument('--hyperband_mode', type=int, default=1) 
-    PARSER.add_argument('--selection_type', type=str, default='successive_halving') 
+    PARSER.add_argument('--image_mode', type=str, default='1D', help='path stroing the images') ###################################
+    PARSER.add_argument('--path', type=str, default='Gaussian_signal', help='path stroing the images')
+    PARSER.add_argument('--noise_level', type=float, default=0.00, help='std dev of noise') ###################################
+    PARSER.add_argument('--img_name', type=str, default='1D_rbf_2.npy', help='image to use') ###################################
+    PARSER.add_argument('--model_type', type=str, default='inpainting', help='inverse problem model type') ##################################
+    PARSER.add_argument('--type_measurements', type=str, default='circulant', help='measurement type') ###################################
+    PARSER.add_argument('--num_measurements', type=int, default=500, help='number of gaussian measurements') ###################################
+    PARSER.add_argument('--mask_name_1D', type=str, default='', help='mask to use') ###################################
+    PARSER.add_argument('--mask_name_2D', type=str, default='', help='mask to use') ###################################
+    PARSER.add_argument('--pickle_file_path', type=str, default='hyperband_rsl.pkl') #######################################
+    PARSER.add_argument('--hyperband_mode', type=int, default=1) #######################################
+    PARSER.add_argument('--selection_type', type=str, default='successive_halving') #######################################
+    PARSER.add_argument('--output_file_path', type=str, default='dec14_circulant.txt') #######################################
 
     # Deep decoder 
-    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') 
-    PARSER.add_argument('--num_channel', type=int, default=6, help='number of upsample channles') 
-    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') 
-    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') 
-    PARSER.add_argument('--filter_size', type=int, default=4, help='upsample type') 
-    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') 
-    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') 
-    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') 
+    PARSER.add_argument('--k', type=int, default=256, help='number of channel dimension') ###################################
+    PARSER.add_argument('--num_channel', type=int, default=6, help='number of upsample channles') ###################################
+    PARSER.add_argument('--decoder_type', type=str, default='fixed_deconv', help='decoder type') ###################################
+    PARSER.add_argument('--upsample_mode', type=str, default='bilinear', help='upsample type') ###################################
+    PARSER.add_argument('--filter_size', type=int, default=4, help='upsample type') ###################################
+    PARSER.add_argument('--upsample_factor', type=float, default=None, help='upsample factor') ###################################
+    PARSER.add_argument('--input_size', type=int, default=128, help='input_size') ###################################
+    PARSER.add_argument('--activation', type=str, default='relu', help='activation type') ###################################
     
     # "Training"
     PARSER.add_argument('--rn', type=float, default=0, help='reg_noise_std')
     PARSER.add_argument('--rnd', type=int, default=500, help='reg_noise_decayevery')
     PARSER.add_argument('--numit', type=int, default=10000, help='number of iterations')
     
-    HPARAMS = PARSER.parse_args()       
+    HPARAMS = PARSER.parse_args()
+
+    file = sys.stdout   
+    sys.stdout = open(HPARAMS.output_file_path, 'w')         
     
     if HPARAMS.selection_type == 'successive_halving':
         out_conig = successive_halving(HPARAMS)
         #out_conig = hyperband(HPARAMS)
         if len(out_conig) > 1:
             out_conig = out_conig[0]
-        
         if HPARAMS.model_type == 'denoising':
             task_info = HPARAMS.img_name + '/' + HPARAMS.type_measurements
         else:
             task_info = HPARAMS.img_name + '/' + HPARAMS.mask_name_1D
-            
         print('Best Config of {}: #channel is {}, #layer is {}, input_size is {}, filter_size is {}'.format(task_info, out_conig[0][0], 
-                out_conig[0][1], out_conig[0][2], out_conig[0][3]))
+            out_conig[0][1], out_conig[0][2], out_conig[0][3]))
 
     else:
         greedy(HPARAMS)
+
