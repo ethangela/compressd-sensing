@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from argparse import ArgumentParser
 from scipy.special import gamma, kv
+import os
 
 def matern_kernel(r, l = 1, v = 1):
     r[r == 0] = 1e-8
@@ -50,19 +51,28 @@ def sample_from_1D_Gaussian(size, kernel, l_val, idx):
     ##plt.plot(xs, fs, 'gray') # Plot the samples
     ##plt.savefig('1D_'+kernel+'_'+str(l_val)+'.jpg')
     #np.save('1D_'+kernel+'_'+str(l_val)+'.npy', fs)
-    np.save('../image/Gaussian signal/1D_'+kernel+'_'+str(l_val)+'_'+str(size)+'_'+str(idx)+'.npy', fs)
+    #if not os.path.exists('Gaussian_signal'):
+    #    os.makedirs('Gaussian_signal/')
+    np.save('1D_'+kernel+'_'+str(l_val)+'_'+str(size)+'_'+str(idx)+'.npy', fs)
    
    
-def main(size, hparams, idx):
-    return sample_from_1D_Gaussian(size, hparams.kernel, hparams.length, idx) 
+def main(size, kernel, length, idx):
+    return sample_from_1D_Gaussian(size, kernel, length, idx) 
 
 
 if __name__ == '__main__':
     
-    size_list = [int(32*pow(p, l)) for p in [1.5, 2, 3, 4] for l in [2,3,4,5]][:-1]
+    # size_list = [int(32*pow(p, l)) for p in [1.5, 2, 3, 4] for l in [2,3,4,5]][:-1]
     
-    for num in range(1,6):
-        for i in range(len(size_list)):
-            for kernel in [('exp',0.25), ('matern',1.0), ('rbf',3.0)]:
-                sample_from_1D_Gaussian(size_list[i], kernel[0], kernel[1], num)
-    
+    # for num in range(1,6):
+    #     for i in range(len(size_list)):
+    #         for kernel in [('exp',0.25), ('matern',1.0), ('rbf',3.0)]:
+    #             sample_from_1D_Gaussian(size_list[i], kernel[0], kernel[1], num)
+
+    for idx_ in range(1,31):
+        sample_from_1D_Gaussian(4096, 'rbf', 1.0, idx_)
+    print('done')
+
+    # for idx_ in range(15,20):
+    #     sample_from_1D_Gaussian(4096, 'exp', 0.25, idx_)
+    # print('done')
