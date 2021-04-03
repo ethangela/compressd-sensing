@@ -1,25 +1,25 @@
 # On Architecture Selection for Linear InverseProblems with Untrained Neural Networks
 
-This repository provides codes for project of Compressed Sensing with Deep Decoder Prior in implementation of both tensorflow and pytorch. (Torch implementation is depreciated)
+This repository provides codes for paper "On Architecture Selection for Linear InverseProblems with Untrained Neural Networks". The codes are built for the purpose of solving linear inverse problems using various priors, e.g. Deep Decoder, Deep Image Prior, and TV Normlization, and optimizing the hyperparameters of these priors. 
 
 ## Requirements
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
 
 ## Usage
-#### For the purpose of inapinting expriment:
+#### For the purpose of liner inverse problem expriment (e.g., inpainting):
 
-python src/compressed_sensing_for_image_signal.py --model_type inpainting --mask_name_1D 1D_mask_block_4096_2_1.npy --img_name 1D_exp_0.25_1.npy --k 300 --num_layers 22 --input_size 50 --filter_size 8 --pickle_file_path nov30_block_ipt_exp.pkl
+python linear_inverse_problem_main_script.py --model_type inpainting --mask_name_1D 1D_mask_block_4096_2_1.npy --img_name 1D_exp_0.25_4096_30.npy
 
-#### For the purpose of denoising (with circulant technique applied) expriment:
+#### For the purpose of hyperparameter selection (e.g., denoising):
 
-python src/compressed_sensing_for_image_signal.py --model_type denoising --type_measurements circulant --num_measurements 500 --img_name 1D_exp_0.25_1.npy --k 300 --num_layers 22 --input_size 50 --filter_size 8 --pickle_file_path nov30_block_ipt_exp.pkl
+python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
 
 #### For the purpose of Gaussian signal generation:
 
-python src/Gaussian_1D.py
+python Gaussian_signal_generator.py
 
 #### For the purpose of mask generation:
 
-python src/mask_generator.py
+python mask_generator.py
 
 
