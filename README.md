@@ -1,6 +1,7 @@
 # On Architecture Selection for Linear InverseProblems with Untrained Neural Networks
 
-This repository provides codes for paper "On Architecture Selection for Linear InverseProblems with Untrained Neural Networks". The codes are built for the purpose of solving linear inverse problems using various priors, e.g. Deep Decoder, Deep Image Prior, and TV Normlization, and optimizing the hyperparameters of these priors. Some parts of the codes in tv_norm_lasso_main_script.py are taken from https://github.com/AshishBora/csgm.
+This repository provides codes for paper "On Architecture Selection for Linear InverseProblems with Untrained Neural Networks". The codes are built for the purpose of solving linear inverse problems using various priors, e.g. Deep Decoder, Deep Image Prior, and TV Normlization, and optimizing the hyperparameters of these priors. 
+Some parts of the codes in tv_norm_lasso_main_script.py are taken from https://github.com/AshishBora/csgm.
 
 ## Requirements
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
