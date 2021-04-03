@@ -1,4 +1,4 @@
-# compressd-sensing
+# On Architecture Selection for Linear InverseProblems with Untrained Neural Networks
 
 This repository provides codes for project of Compressed Sensing with Deep Decoder Prior in implementation of both tensorflow and pytorch. (Torch implementation is depreciated)
 
