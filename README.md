@@ -7,7 +7,7 @@ Some parts of the codes in tv_norm_lasso_main_script.py are taken from https://g
 ## Requirements
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
 
-## Example Script Command For Usage: 
+## I. Example Script Command For Usage: 
 #### For the purpose of hyperparameter selection training:
 
 ##### 1. synthetic signal inpainting: 
@@ -22,7 +22,7 @@ python hyperparameter_selection_main_script.py --model_type compressing --num_me
 ##### 4. MRI data compressing: 
 python MRI_hyperparameter_selection_main_script.py.py --arch_name ConvDecoder --stype successive_halving --file_name file1000758.h5
 
-#### For the purpose of single sample testing:
+#### II. For the purpose of single sample testing:
 
 ##### 1. synthetic signal / real air signal / celeba signal: 
 python linear_inverse_problem_main_script.py --model_type inpainting --mask_name_1D 1D_mask_block_4096_2_1.npy --chn 200 --lay 3 --ipt 10 --lrn 0.0015 --img_name 1D_exp_0.25_4096_30.npy
@@ -31,12 +31,12 @@ python linear_inverse_problem_main_script.py --model_type inpainting --mask_name
 python linear_inverse_problem_MRI_main_script.py --arch_name DD --chn 368 --lay 10 --ipt 16 --lrn 0.008 --file_name file1000308.h5
 
 
-#### For the purpose of Gaussian signal generation:
+#### III. For the purpose of Gaussian signal generation:
 
 python Gaussian_signal_generator.py
 
 
-#### For the purpose of mask generation:
+#### IV. For the purpose of mask generation:
 
 python mask_generator.py
 
