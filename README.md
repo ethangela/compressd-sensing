@@ -8,17 +8,22 @@ Some parts of the codes in tv_norm_lasso_main_script.py are taken from https://g
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
 
 ## Usage
-#### For the purpose of liner inverse problem expriment (e.g., inpainting):
+#### For the purpose of hyperparameter selection training:
+
+##### synthetic signal inpainting: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+##### real air data denoising: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+##### celebA data compressing: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+
+
+#### For the purpose of single sample testing:
 
 python linear_inverse_problem_main_script.py --model_type inpainting --mask_name_1D 1D_mask_block_4096_2_1.npy --img_name 1D_exp_0.25_4096_30.npy
 
-#### For the purpose of hyperparameter selection (e.g., denoising):
-
-python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
 
 #### For the purpose of Gaussian signal generation:
 
 python Gaussian_signal_generator.py
+
 
 #### For the purpose of mask generation:
 
