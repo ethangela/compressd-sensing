@@ -7,8 +7,8 @@ Some parts of the codes in tv_norm_lasso_main_script.py are taken from https://g
 ## Requirements
 Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, pandas and scipy etc.
 
-## I. Example Script Command For Usage: 
-#### For the purpose of hyperparameter selection training:
+## Example Script Command For Usage: 
+#### I. For the purpose of hyperparameter selection training:
 
 ##### 1. synthetic signal inpainting: 
 python hyperparameter_selection_main_script.py --model_type inpainting --mask_name_1D 1D_mask_block_1024_2_1.npy --image_mode 1D --path Gaussian_signal --img_name 1D_rbf_1.0_4096_30.npy
