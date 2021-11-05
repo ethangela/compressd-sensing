@@ -10,9 +10,14 @@ Tensorflow 1.13+ and Python 3.5+. Other dependecies include numpy, matplotlib, p
 ## Usage
 #### For the purpose of hyperparameter selection training:
 
-##### synthetic signal inpainting: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
-##### real air data denoising: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
-##### celebA data compressing: python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+##### 1. synthetic signal inpainting: 
+python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+
+##### 2. real air data denoising: 
+python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
+
+##### 3. celebA data compressing: 
+python hyperparameter_selection_main_script.py --model_type denoising --type_measurements identity --noise_level 0.05 --img_name 1D_rbf_1.0_4096_30.npy
 
 
 #### For the purpose of single sample testing:
